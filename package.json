@@ -25,7 +25,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/deniskipeles/apexkit-sdk.git"
+    "url": "https://github.com/deniskipeles/apexkit-js-sdk.git"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

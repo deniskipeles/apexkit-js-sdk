@@ -1004,6 +1004,17 @@ export class ApexKitRealtimeWSClient {
     this.socket.onopen = () => {
       console.log('[ApexKit] Realtime Connected');
       this.isConnected = true;
+
+      // [ADDED] Automatically Authenticate WS Streams immediately upon opening
+      if (this.token && this.socket) {
+        this.socket.send(
+          JSON.stringify({
+            type: 'Auth',
+            payload: { token: this.token },
+          })
+        );
+      }
+
       if (this.currentFilter) {
         this.subscribe(this.currentFilter);
       }
@@ -1016,6 +1027,9 @@ export class ApexKitRealtimeWSClient {
           this._handleRequestResponse(msg);
           return;
         }
+        // [ADDED] Ignore internal Auth Acks
+        if (msg.type === 'AuthSuccess' || msg.type === 'Error') return;
+
         this.notify(msg);
       } catch (e) {
         if (event.data === 'Pong') return;
@@ -1186,11 +1200,13 @@ export class ApexKitRealtimeWSClient {
  */
 export class ApexKitRealtimeSSEClient {
   private baseUrl: string;
+  private token: string | null;
   private source: EventSource | null = null;
   private listeners: Array<(msg: any) => void> = [];
 
-  constructor(baseUrl: string) {
+  constructor(baseUrl: string, token: string | null = null) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.token = token;
   }
 
   connect({ channel, eventName }: { channel?: string; eventName?: string } = {}) {
@@ -1199,6 +1215,9 @@ export class ApexKitRealtimeSSEClient {
     const params = new URLSearchParams();
     if (channel) params.append('channel', channel);
     if (eventName) params.append('event', eventName);
+
+    // [ADDED] Forward the Token securely for stream authentication
+    if (this.token) params.append('token', this.token);
 
     this.source = new EventSource(`${this.baseUrl}/sse?${params.toString()}`, {
       withCredentials: true,
