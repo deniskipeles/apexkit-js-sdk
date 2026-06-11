@@ -148,13 +148,25 @@ export interface Plugin {
 }
 
 export interface ApiKey {
+  // Common Identifier & Metadata
   id: string;
   name: string;
-  prefix: string;
-  role: string;
-  scope: string;
-  bypass_cors: boolean;
   created_at: string;
+
+  // New Scoped & Composite Fields
+  tenant_id: string;
+  key_id: string;
+  issuer: 'root' | 'tnt' | string;
+  env_type: 'sys' | 'tnnt' | 'sk' | 'pk' | string;
+  roles: string[];
+  status: 'active' | 'revoked' | string;
+  bypass_cors: boolean;
+
+  // Legacy Compatibility Fields
+  prefix?: string;
+  role?: string;
+  scope?: string;
+  created?: string;
 }
 
 export interface SystemLog {
@@ -535,12 +547,28 @@ export class ApexKit {
 
       // API Keys
       listApiKeys: () => this._request<ApiKey[]>('/admin/keys', { method: 'GET' }),
-      createApiKey: (name: string, role = 'admin', scope = 'root', bypass_cors = true) =>
+      createApiKey: (
+        name: string,
+        role = 'admin',
+        scope = 'root',
+        bypass_cors = true,
+        env_type = 'sys',
+        roles: string[] = ['admin'],
+        target_tenant?: string
+      ) =>
         this._request<{ key: string; info: ApiKey }>('/admin/keys', {
           method: 'POST',
-          body: { name, role, scope, bypass_cors },
+          body: {
+            name,
+            role,
+            scope,
+            bypass_cors,
+            env_type,
+            roles,
+            target_tenant,
+          },
         }),
-      updateApiKey: (id: string | number, updates: any) =>
+      updateApiKey: (id: string | number, updates: Partial<ApiKey>) =>
         this._request(`/admin/keys/${id}`, { method: 'PUT', body: updates }),
       deleteApiKey: (id: string | number) =>
         this._request(`/admin/keys/${id}`, { method: 'DELETE' }),
