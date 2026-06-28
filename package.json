@@ -1,6 +1,6 @@
 {
   "name": "@apexkit/sdk",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "The official JavaScript SDK for ApexKit",
   "type": "module",
   "main": "./dist/index.cjs",
