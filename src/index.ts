@@ -944,13 +944,64 @@ export class ApexKit {
 
       delete: (id: string | number) => this._request(`/storage/files/${id}`, { method: 'DELETE' }),
 
-      getFileUrl: (filename: string): string => {
+      getFileUrl: (
+        filename: string,
+        options?:
+          | string
+          | {
+              thumb?: string;
+              format?: string;
+              quality?: number;
+              signed?: boolean;
+              expiresIn?: number;
+            }
+      ): string | Promise<string> => {
         if (filename.startsWith('http://') || filename.startsWith('https://')) {
           return filename;
         }
+
+        // Asynchronous Signed Resolution
+        if (options && typeof options === 'object' && options.signed) {
+          const params: Record<string, any> = {};
+          if (options.expiresIn) {
+            params.expires_in = options.expiresIn;
+          }
+
+          return this._request<{ signed_url: string }>(
+            `/storage/files/${encodeURIComponent(filename)}`,
+            { method: 'GET', params }
+          ).then((res) => {
+            let url = res.signed_url;
+
+            // Append transformation parameters to the signed URL if provided
+            const extraParams = new URLSearchParams();
+            if (options.thumb) extraParams.append('thumb', options.thumb);
+            if (options.format) extraParams.append('format', options.format);
+            if (options.quality) extraParams.append('quality', String(options.quality));
+
+            const queryStr = extraParams.toString();
+            if (queryStr) {
+              url += (url.includes('?') ? '&' : '?') + queryStr;
+            }
+            return url;
+          });
+        }
+
+        // Synchronous Public URL Resolution (No Network Request)
         const base = this.baseUrl.replace(/\/$/, '');
         const name = filename.replace(/^\//, '');
-        return `${base}/api/v1/storage/file/${name}`;
+        const url = new URL(`${base}/api/v1/storage/file/${name}`);
+
+        if (options) {
+          if (typeof options === 'string') {
+            url.searchParams.append('thumb', options);
+          } else {
+            if (options.thumb) url.searchParams.append('thumb', options.thumb);
+            if (options.format) url.searchParams.append('format', options.format);
+            if (options.quality) url.searchParams.append('quality', String(options.quality));
+          }
+        }
+        return url.toString();
       },
     };
   }
