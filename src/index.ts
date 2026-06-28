@@ -928,7 +928,7 @@ export class ApexKit {
         ),
 
       searchImageVectorWithImage: (imageData: string, limit = 10) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search-image-vector-image`, {
+        this._request<BaseRecord[]>(`/collections/${collectionId}/search-image-vector-with-image`, {
           method: 'POST',
           body: { image_data: imageData, limit },
         }),
