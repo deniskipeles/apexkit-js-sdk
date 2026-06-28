@@ -832,10 +832,10 @@ export class ApexKit {
           method: 'POST',
           body: { query },
         }),
-      searchRecordsWithOSE: (query: string) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search`, {
+      searchRecordsWithOSE: (query: string, options: QueryOptions = {}) =>
+        this._request<ListResult<BaseRecord>>(`/collections/${collectionId}/search`, {
           method: 'GET',
-          params: { q: query },
+          params: { q: query, ...options },
         }),
       searchRecordsInstantlyWithOSE: (query: string) =>
         this._request<InstantResult[]>(`/collections/${collectionId}/instant-search`, {
@@ -896,20 +896,39 @@ export class ApexKit {
           },
         }),
 
-      searchVector: (field: string, vector: number[], limit = 10) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search-vector`, {
-          method: 'POST',
-          body: { field, vector, limit },
-        }),
+      searchVectorWithVector: (field: string, vector: number[], options: QueryOptions = {}) =>
+        this._request<ListResult<BaseRecord>>(
+          `/collections/${collectionId}/search-vector-with-vector`,
+          {
+            method: 'POST',
+            body: {
+              field,
+              vector,
+              limit: options.per_page || options.limit, // Maps to backend option limit
+              expand: options.expand,
+              page: options.page,
+              per_page: options.per_page,
+            },
+          }
+        ),
 
-      searchTextVector: (queryText: string, limit = 10) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search-text-vector`, {
-          method: 'POST',
-          body: { query_text: queryText, limit },
-        }),
+      searchVectorWithText: (queryText: string, options: QueryOptions = {}) =>
+        this._request<ListResult<BaseRecord>>(
+          `/collections/${collectionId}/search-vector-with-text`,
+          {
+            method: 'POST',
+            body: {
+              query_text: queryText,
+              limit: options.per_page || options.limit,
+              expand: options.expand,
+              page: options.page,
+              per_page: options.per_page,
+            },
+          }
+        ),
 
-      searchImageVector: (imageData: string, limit = 10) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search-image-vector`, {
+      searchImageVectorWithImage: (imageData: string, limit = 10) =>
+        this._request<BaseRecord[]>(`/collections/${collectionId}/search-image-vector-image`, {
           method: 'POST',
           body: { image_data: imageData, limit },
         }),
