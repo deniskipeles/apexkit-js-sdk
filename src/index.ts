@@ -1302,7 +1302,7 @@ export class ApexKitRealtimeWSClient {
         JSON.stringify({
           type: 'Search',
           payload: {
-            collection_id: Number(collectionId),
+            collection_id: isNaN(Number(collectionId)) ? collectionId : Number(collectionId),
             query,
             limit,
             request_id: requestId,
