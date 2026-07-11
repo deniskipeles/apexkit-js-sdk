@@ -410,11 +410,12 @@ export class ApexKit {
       register: async (
         email: string,
         password: string,
-        metadata: Record<string, any> = {}
+        metadata: Record<string, any> = {},
+        role?: string,
       ): Promise<AuthResponse> => {
         const res = await this._request<AuthResponse>('/auth/register', {
           method: 'POST',
-          body: { email, password, metadata },
+          body: { email, password, metadata, role },
         });
         this.token = res.token;
         this.currentUser = res.user;
