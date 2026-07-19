@@ -802,8 +802,8 @@ export class ApexKit {
       delete: (id: string | number) => this._request(`/admin/scripts/${id}`, { method: 'DELETE' }),
       run: (name: string, variables: any) =>
         this._request<any>(`/run/${name}`, { method: 'POST', body: variables }),
-      export: async (): Promise<Blob> => {
-        const res = await fetch(`${this.baseUrl}/api/v1/admin/export-scripts`, {
+      export: async (format: 'json' | 'txt' = 'json'): Promise<Blob> => {
+        const res = await fetch(`${this.baseUrl}/api/v1/admin/export-scripts?format=${format}`, {
           headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
         });
         return res.blob();
@@ -825,8 +825,8 @@ export class ApexKit {
         this._request(`/admin/templates/${id}`, { method: 'PUT', body: data }),
       delete: (id: string | number) =>
         this._request(`/admin/templates/${id}`, { method: 'DELETE' }),
-      export: async (): Promise<Blob> => {
-        const res = await fetch(`${this.baseUrl}/api/v1/admin/export-templates`, {
+      export: async (format: 'json' | 'txt' = 'json'): Promise<Blob> => {
+        const res = await fetch(`${this.baseUrl}/api/v1/admin/export-templates?format=${format}`, {
           headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
         });
         return res.blob();
