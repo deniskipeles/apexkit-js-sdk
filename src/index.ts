@@ -800,8 +800,20 @@ export class ApexKit {
       create: (data: Partial<Script>) =>
         this._request<Script>('/admin/scripts', { method: 'POST', body: data }),
       delete: (id: string | number) => this._request(`/admin/scripts/${id}`, { method: 'DELETE' }),
-      run: (name: string, variables: any) =>
-        this._request<any>(`/run/${name}`, { method: 'POST', body: variables }),
+      run: (name: string, variables: any = {}) => {
+        // Extract method if provided, default to POST
+        const method = (variables.__method__ || 'POST').toUpperCase();
+        
+        // Create a clean payload without internal SDK keys
+        const payload = { ...variables };
+        delete payload.__method__;
+
+        return this._request<any>(`/run/${name}`, { 
+          method, 
+          body: method !== 'GET' && method !== 'HEAD' ? payload : undefined,
+          params: method === 'GET' || method === 'HEAD' ? payload : undefined
+        });
+      },
       export: async (format: 'json' | 'txt' = 'json'): Promise<Blob> => {
         const res = await fetch(`${this.baseUrl}/api/v1/admin/export-scripts?format=${format}`, {
           headers: this.token ? { Authorization: `Bearer ${this.token}` } : {},
@@ -813,6 +825,34 @@ export class ApexKit {
         formData.append('file', file);
         return this._request('/admin/import-scripts', { method: 'POST', body: formData });
       },
+    };
+  }
+  /**
+   * Operations for a specific Webhook (Script).
+   * Provides fluent access to HTTP methods for a named script endpoint.
+   */
+  webhook(name: string) {
+    const execute = (method: string, data: any = {}) => {
+      return this._request<any>(`/webhook/${name}`, {
+        method,
+        body: method !== 'GET' && method !== 'HEAD' ? data : undefined,
+        params: method === 'GET' || method === 'HEAD' ? data : undefined
+      });
+    };
+
+    return {
+      get: (params?: any) => execute('GET', params),
+      post: (body?: any) => execute('POST', body),
+      put: (body?: any) => execute('PUT', body),
+      patch: (body?: any) => execute('PATCH', body),
+      delete: (params?: any) => execute('DELETE', params),
+      options: (params?: any) => execute('OPTIONS', params),
+      head: (params?: any) => execute('HEAD', params),
+      
+      /**
+       * Execute the webhook with a custom/dynamic HTTP method.
+       */
+      execute: (method: string, payload?: any) => execute(method.toUpperCase(), payload)
     };
   }
 
