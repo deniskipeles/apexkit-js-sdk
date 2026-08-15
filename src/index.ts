@@ -224,6 +224,7 @@ export class ApexKit {
   private currentUser: User | null = null;
   private scopeType: ScopeType;
   private scopeId: string;
+  private customHeaders: Record<string, string> = {};
 
   /**
    * Initialize the ApexKit client.
@@ -235,6 +236,46 @@ export class ApexKit {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.scopeType = scopeType;
     this.scopeId = scopeId;
+  }
+
+  /**
+   * Set or override a custom header for all subsequent outgoing requests.
+   * Can be used for API Keys (e.g. 'x-api-key'), custom auth headers, or overriding 'Authorization'.
+   */
+  setHeader(key: string, value: string): this {
+    this.customHeaders[key] = value;
+    return this;
+  }
+
+  /**
+   * Set multiple custom headers at once.
+   */
+  setHeaders(headers: Record<string, string>): this {
+    this.customHeaders = { ...this.customHeaders, ...headers };
+    return this;
+  }
+
+  /**
+   * Remove a specific custom header.
+   */
+  removeHeader(key: string): this {
+    delete this.customHeaders[key];
+    return this;
+  }
+
+  /**
+   * Clear all custom headers.
+   */
+  clearHeaders(): this {
+    this.customHeaders = {};
+    return this;
+  }
+
+  /**
+   * Get a copy of all active custom headers.
+   */
+  getHeaders(): Record<string, string> {
+    return { ...this.customHeaders };
   }
 
   /**
@@ -252,6 +293,7 @@ export class ApexKit {
     const sandboxUrl = `${this.baseUrl}/sandbox/${uuid}`;
     const instance = new ApexKit(sandboxUrl, 'sandbox', uuid);
     instance.setToken(this.token || '', this.currentUser || undefined);
+    instance.setHeaders(this.customHeaders);
     return instance;
   }
 
@@ -263,6 +305,7 @@ export class ApexKit {
     const tenantUrl = `${this.baseUrl}/tenant/${tenantId}`;
     const instance = new ApexKit(tenantUrl, 'tenant', tenantId);
     instance.setToken(this.token || '', this.currentUser || undefined);
+    instance.setHeaders(this.customHeaders);
     return instance;
   }
 
@@ -330,8 +373,17 @@ export class ApexKit {
 
     const headers: Record<string, string> = { ...options.headers };
 
+    // 1. Default Bearer Token (if logged in)
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`;
+    }
+
+    // 2. Global Custom Headers (overrides token if Authorization is explicitly set)
+    Object.assign(headers, this.customHeaders);
+
+    // 3. Per-Request Options (highest priority)
+    if (options.headers) {
+      Object.assign(headers, options.headers);
     }
 
     const config: RequestInit = {
@@ -615,6 +667,11 @@ export class ApexKit {
           method: 'POST',
           body: { force },
         }),
+      flushVectors: (model: string) =>
+        this._request<{ success: boolean; deleted: number }>('/admin/vectors/flush', {
+          method: 'POST',
+          body: { model },
+        }),
 
       // Import/Export
       importData: (collectionName: string, file: File) => {
@@ -704,6 +761,9 @@ export class ApexKit {
         if (this.token) {
           headers['Authorization'] = `Bearer ${this.token}`;
         }
+
+        // Apply custom headers (e.g. custom x-api-key or overridden Authorization)
+        Object.assign(headers, this.customHeaders);
 
         const response = await fetch(url.toString(), {
           method: 'POST',
