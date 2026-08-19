@@ -183,6 +183,24 @@ export interface SiteFile {
   size: number;
 }
 
+export interface ResumableUploadOptions {
+  /**
+   * Chunk size in bytes (default: 524288 = 512 KB)
+   */
+  chunkSize?: number;
+  metadata?: Record<string, string>;
+  onProgress?: (progress: { bytesUploaded: number; bytesTotal: number; percentage: number }) => void;
+  onSuccess?: (file: { id: string; url: string; filename: string }) => void;
+  onError?: (error: Error) => void;
+}
+
+export interface ResumableUploadControl {
+  pause: () => void;
+  resume: () => Promise<void>;
+  abort: () => Promise<void>;
+  promise: Promise<{ id: string; url: string; filename: string }>;
+}
+
 // ===========================
 // 2. Custom Error Class
 // ===========================
@@ -1083,6 +1101,133 @@ export class ApexKit {
         const formData = new FormData();
         formData.append('file', file);
         return this._request<StoredFile>('/storage/upload', { method: 'POST', body: formData });
+      },
+
+      uploadResumable: (
+        file: File | Blob,
+        options: ResumableUploadOptions = {}
+      ): ResumableUploadControl => {
+        const chunkSize = options.chunkSize || 512 * 1024; // 512 KB Default
+        const totalSize = file.size;
+        const filename = (file as File).name || 'unnamed_upload.bin';
+        const filetype = file.type || 'application/octet-stream';
+
+        let uploadLocation: string | null = null;
+        let isPaused = false;
+        let isAborted = false;
+        let offset = 0;
+
+        const tusEndpoint = `${this.baseUrl}/api/v1/storage/upload/tus`;
+
+        const encodeMetadata = (meta: Record<string, string>) => {
+          return Object.entries(meta)
+            .map(([k, v]) => `${k} ${btoa(unescape(encodeURIComponent(v)))}`)
+            .join(',');
+        };
+
+        const execute = async (): Promise<{ id: string; url: string; filename: string }> => {
+          // 1. Create Tus Session
+          if (!uploadLocation) {
+            const metaHeader = encodeMetadata({
+              filename,
+              filetype,
+              ...(options.metadata || {}),
+            });
+
+            const headers: Record<string, string> = {
+              'Tus-Resumable': '1.0.0',
+              'Upload-Length': String(totalSize),
+              'Upload-Metadata': metaHeader,
+            };
+            if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+            Object.assign(headers, this.customHeaders);
+
+            const res = await fetch(tusEndpoint, {
+              method: 'POST',
+              headers,
+            });
+
+            if (!res.ok) {
+              const err = new Error(`Failed to initialize resumable upload: ${res.statusText}`);
+              options.onError?.(err);
+              throw err;
+            }
+
+            uploadLocation = res.headers.get('Location');
+            if (!uploadLocation) throw new Error('Missing Location header from server');
+
+            // Handle relative locations
+            if (uploadLocation.startsWith('/')) {
+              uploadLocation = `${this.baseUrl}${uploadLocation}`;
+            }
+          }
+
+          // 2. Stream 512KB Chunks
+          while (offset < totalSize) {
+            if (isPaused) return new Promise(() => {}); // Halts execution
+            if (isAborted) throw new Error('Upload aborted');
+
+            const end = Math.min(offset + chunkSize, totalSize);
+            const chunk = file.slice(offset, end);
+
+            const patchHeaders: Record<string, string> = {
+              'Tus-Resumable': '1.0.0',
+              'Upload-Offset': String(offset),
+              'Content-Type': 'application/offset+octet-stream',
+            };
+            if (this.token) patchHeaders['Authorization'] = `Bearer ${this.token}`;
+            Object.assign(patchHeaders, this.customHeaders);
+
+            const patchRes = await fetch(uploadLocation, {
+              method: 'PATCH',
+              headers: patchHeaders,
+              body: chunk,
+            });
+
+            if (!patchRes.ok) {
+              const err = new Error(`Chunk upload failed at offset ${offset}: ${patchRes.statusText}`);
+              options.onError?.(err);
+              throw err;
+            }
+
+            const newOffsetStr = patchRes.headers.get('Upload-Offset');
+            offset = newOffsetStr ? Number(newOffsetStr) : end;
+
+            const percentage = Math.min(100, Math.round((offset / totalSize) * 100));
+            options.onProgress?.({ bytesUploaded: offset, bytesTotal: totalSize, percentage });
+
+            if (offset >= totalSize) {
+              const fileId = patchRes.headers.get('X-File-Id') || '';
+              const fileUrl = patchRes.headers.get('X-File-Url') || '';
+              const result = { id: fileId, url: fileUrl, filename };
+              options.onSuccess?.(result);
+              return result;
+            }
+          }
+
+          throw new Error('Unexpected termination');
+        };
+
+        const promise = execute();
+
+        return {
+          pause: () => {
+            isPaused = true;
+          },
+          resume: () => {
+            isPaused = false;
+            return execute().then(() => {});
+          },
+          abort: async () => {
+            isAborted = true;
+            if (uploadLocation) {
+              const delHeaders: Record<string, string> = { 'Tus-Resumable': '1.0.0' };
+              if (this.token) delHeaders['Authorization'] = `Bearer ${this.token}`;
+              await fetch(uploadLocation, { method: 'DELETE', headers: delHeaders }).catch(() => {});
+            }
+          },
+          promise,
+        };
       },
 
       delete: (id: string | number) => this._request(`/storage/files/${id}`, { method: 'DELETE' }),
