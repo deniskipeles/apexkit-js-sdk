@@ -908,29 +908,55 @@ export class ApexKit {
   /**
    * Operations for a specific Webhook (Script).
    * Provides fluent access to HTTP methods for a named script endpoint.
+   * Cleans and normalizes subpaths to prevent 404 route mismatches.
    */
   webhook(name: string) {
-    const execute = (method: string, data: any = {}) => {
-      return this._request<any>(`/webhook/${name}`, {
+    const execute = <T = any>(method: string, subpathOrData?: any, data?: any): Promise<T> => {
+      let subpath = '';
+      let payload = data || {};
+
+      if (typeof subpathOrData === 'string') {
+        let clean = subpathOrData.trim();
+
+        // 1. If empty or lone slash, point directly to root webhook (/webhook/{name})
+        if (!clean || clean === '/' || clean === './') {
+          subpath = '';
+        } else {
+          // 2. Ensure leading slash
+          if (!clean.startsWith('/')) {
+            clean = `/${clean}`;
+          }
+
+          // 3. Strip trailing slashes while preserving any URL query parameters
+          const [pathPart = '', queryPart] = clean.split('?');
+          const normalizedPath = pathPart.replace(/\/+$/, ''); // removes all trailing slashes
+
+          subpath = queryPart !== undefined ? `${normalizedPath}?${queryPart}` : normalizedPath;
+        }
+      } else if (subpathOrData !== undefined && subpathOrData !== null) {
+        payload = subpathOrData;
+      }
+
+      const endpoint = `/webhook/${name}${subpath}`;
+
+      return this._request<T>(endpoint, {
         method,
-        body: method !== 'GET' && method !== 'HEAD' ? data : undefined,
-        params: method === 'GET' || method === 'HEAD' ? data : undefined
+        body: method !== 'GET' && method !== 'HEAD' ? payload : undefined,
+        params: method === 'GET' || method === 'HEAD' ? payload : undefined
       });
     };
 
     return {
-      get: (params?: any) => execute('GET', params),
-      post: (body?: any) => execute('POST', body),
-      put: (body?: any) => execute('PUT', body),
-      patch: (body?: any) => execute('PATCH', body),
-      delete: (params?: any) => execute('DELETE', params),
-      options: (params?: any) => execute('OPTIONS', params),
-      head: (params?: any) => execute('HEAD', params),
+      get: <T = any>(subpathOrParams?: string | any, params?: any) => execute<T>('GET', subpathOrParams, params),
+      post: <T = any>(subpathOrBody?: string | any, body?: any) => execute<T>('POST', subpathOrBody, body),
+      put: <T = any>(subpathOrBody?: string | any, body?: any) => execute<T>('PUT', subpathOrBody, body),
+      patch: <T = any>(subpathOrBody?: string | any, body?: any) => execute<T>('PATCH', subpathOrBody, body),
+      delete: <T = any>(subpathOrParams?: string | any, params?: any) => execute<T>('DELETE', subpathOrParams, params),
+      options: <T = any>(subpathOrParams?: string | any, params?: any) => execute<T>('OPTIONS', subpathOrParams, params),
+      head: <T = any>(subpathOrParams?: string | any, params?: any) => execute<T>('HEAD', subpathOrParams, params),
       
-      /**
-       * Execute the webhook with a custom/dynamic HTTP method.
-       */
-      execute: (method: string, payload?: any) => execute(method.toUpperCase(), payload)
+      execute: <T = any>(method: string, subpathOrPayload?: string | any, payload?: any) => 
+        execute<T>(method.toUpperCase(), subpathOrPayload, payload)
     };
   }
 
