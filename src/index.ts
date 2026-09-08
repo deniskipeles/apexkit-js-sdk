@@ -31,6 +31,15 @@ export interface BaseRecord {
   [key: string]: any;
 }
 
+export interface TypedRecord<TData = any, TExpand = any> {
+  id: string;
+  data: TData;
+  expand?: TExpand;
+  created: string;
+  updated: string;
+  [key: string]: any;
+}
+
 export interface ListResult<T> {
   items: T[];
   total: number;
@@ -236,7 +245,10 @@ interface RequestOptions {
  * A TypeScript client for the ApexKit API.
  * Compatible with modern Browsers and Node.js.
  */
-export class ApexKit {
+export class ApexKit<
+  TCollections extends Record<string, any> = Record<string, any>,
+  TExpands extends Record<string, any> = Record<string, any>
+> {
   public baseUrl: string;
   private token: string | null = null;
   private currentUser: User | null = null;
@@ -307,9 +319,9 @@ export class ApexKit {
    * Creates a new client instance pointed at a specific Sandbox session.
    * @param uuid - The Sandbox Session ID.
    */
-  sandbox(uuid: string): ApexKit {
+  sandbox(uuid: string): ApexKit<TCollections, TExpands> {
     const sandboxUrl = `${this.baseUrl}/sandbox/${uuid}`;
-    const instance = new ApexKit(sandboxUrl, 'sandbox', uuid);
+    const instance = new ApexKit<TCollections, TExpands>(sandboxUrl, 'sandbox', uuid);
     instance.setToken(this.token || '', this.currentUser || undefined);
     instance.setHeaders(this.customHeaders);
     return instance;
@@ -319,9 +331,9 @@ export class ApexKit {
    * Creates a new client instance pointed at a specific Tenant.
    * @param tenantId - The Tenant ID.
    */
-  tenant(tenantId: string): ApexKit {
+  tenant(tenantId: string): ApexKit<TCollections, TExpands> {
     const tenantUrl = `${this.baseUrl}/tenant/${tenantId}`;
-    const instance = new ApexKit(tenantUrl, 'tenant', tenantId);
+    const instance = new ApexKit<TCollections, TExpands>(tenantUrl, 'tenant', tenantId);
     instance.setToken(this.token || '', this.currentUser || undefined);
     instance.setHeaders(this.customHeaders);
     return instance;
@@ -986,22 +998,25 @@ export class ApexKit {
   /**
    * Operations for a specific Collection.
    */
-  collection(collectionId: string | number) {
+  collection<T extends Extract<keyof TCollections, string> | (string & Record<never, never>)>(collectionId: T) {
+    type TData = T extends keyof TCollections ? TCollections[T] : any;
+    type TExpand = T extends keyof TExpands ? TExpands[T] : any;
+    type Rec = TypedRecord<TData, TExpand>;
+
     return {
       list: (options: QueryOptions = {}) =>
-        this._request<ListResult<BaseRecord>>(`/collections/${collectionId}/records`, {
+        this._request<ListResult<Rec>>(`/collections/${collectionId}/records`, {
           method: 'GET',
           params: options,
         }),
 
-      // [RENAMED] Fully mapped to the unified query engine
       searchRecordsWithSQLQueryEngine: (query: any) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/query`, {
+        this._request<Rec[]>(`/collections/${collectionId}/query`, {
           method: 'POST',
           body: { query },
         }),
       searchRecordsWithOSE: (query: string, options: QueryOptions = {}) =>
-        this._request<ListResult<BaseRecord>>(`/collections/${collectionId}/search`, {
+        this._request<ListResult<Rec>>(`/collections/${collectionId}/search`, {
           method: 'GET',
           params: { q: query, ...options },
         }),
@@ -1011,23 +1026,23 @@ export class ApexKit {
           params: { q: query },
         }),
 
-      create: (data: any) =>
-        this._request<BaseRecord>(`/collections/${collectionId}/records`, {
+      create: (data: Partial<TData>) =>
+        this._request<Rec>(`/collections/${collectionId}/records`, {
           method: 'POST',
           body: { data },
         }),
       get: (recordId: string | number, options: { expand?: string } = {}) =>
-        this._request<BaseRecord>(`/collections/${collectionId}/records/${recordId}`, {
+        this._request<Rec>(`/collections/${collectionId}/records/${recordId}`, {
           method: 'GET',
           params: options,
         }),
-      update: (recordId: string | number, data: any) =>
-        this._request<BaseRecord>(`/collections/${collectionId}/records/${recordId}`, {
+      update: (recordId: string | number, data: Partial<TData>) =>
+        this._request<Rec>(`/collections/${collectionId}/records/${recordId}`, {
           method: 'PUT',
           body: { data },
         }),
-      patch: (recordId: string | number, data: any) =>
-        this._request<BaseRecord>(`/collections/${collectionId}/records/${recordId}`, {
+      patch: (recordId: string | number, data: Partial<TData>) =>
+        this._request<Rec>(`/collections/${collectionId}/records/${recordId}`, {
           method: 'PATCH',
           body: { data },
         }),
@@ -1064,8 +1079,8 @@ export class ApexKit {
           },
         }),
 
-      searchVectorWithVector: (field: string, vector: number[], options: QueryOptions = {}) =>
-        this._request<ListResult<BaseRecord>>(
+      searchVectorWithVector: (field: Extract<keyof TData, string> | (string & Record<never, never>), vector: number[], options: QueryOptions = {}) =>
+        this._request<ListResult<Rec & { _score: number }>>(
           `/collections/${collectionId}/search-vector-with-vector`,
           {
             method: 'POST',
@@ -1081,7 +1096,7 @@ export class ApexKit {
         ),
 
       searchVectorWithText: (queryText: string, options: QueryOptions = {}) =>
-        this._request<ListResult<BaseRecord>>(
+        this._request<ListResult<Rec & { _score: number }>>(
           `/collections/${collectionId}/search-vector-with-text`,
           {
             method: 'POST',
@@ -1096,13 +1111,13 @@ export class ApexKit {
         ),
 
       searchImageVectorWithImage: (imageData: string, limit = 10) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search-image-vector-with-image`, {
+        this._request<(Rec & { _score: number })[]>(`/collections/${collectionId}/search-image-vector-with-image`, {
           method: 'POST',
           body: { image_data: imageData, limit },
         }),
 
       searchImageVectorWithText: (queryText: string, limit = 10) =>
-        this._request<BaseRecord[]>(`/collections/${collectionId}/search-image-vector-with-text`, {
+        this._request<(Rec & { _score: number })[]>(`/collections/${collectionId}/search-image-vector-with-text`, {
           method: 'POST',
           body: { query_text: queryText, limit },
         }),
