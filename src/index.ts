@@ -723,6 +723,18 @@ export class ApexKit<
         if (!res.ok) throw new Error('Export failed');
         return res.blob();
       },
+      // WASM Management
+      listWasm: () => this._request<any[]>('/admin/wasm'),
+      uploadWasm: (name: string, file: File) => {
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('file', file);
+        return this._request('/admin/wasm/upload', { method: 'POST', body: formData });
+      },
+      fetchWasm: (url: string, name?: string) => 
+        this._request('/admin/wasm/fetch', { method: 'POST', body: { url, name } }),
+      deleteWasm: (name: string) => this._request(`/admin/wasm/${encodeURIComponent(name)}`, { method: 'DELETE' }),
+
       getDashboardStats: () => this._request('/admin/dashboard'),
 
       // Tenant Admin Ops
@@ -1272,6 +1284,16 @@ export class ApexKit<
       },
 
       delete: (id: string | number) => this._request(`/storage/files/${id}`, { method: 'DELETE' }),
+
+      listOrphans: () => this._request<{ 
+        storage_orphans: { filename: string; size: number }[]; 
+        db_orphans: { id: number; filename: string }[] 
+      }>('/admin/storage/orphans', { method: 'GET' }),
+
+      resolveOrphans: (action: 'flush_storage' | 'register_storage' | 'flush_db') => 
+        this._request<{ success: boolean; processed: number }>('/admin/storage/orphans', { 
+          method: 'POST', body: { action } 
+      }),
 
       // --- [NEW] OPENGRAPH URL BUILDER ---
       /**
