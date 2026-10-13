@@ -1709,9 +1709,12 @@ export class ApexKitRealtimeWSClient {
  * const sse = new ApexKitRealtimeSSEClient('http://localhost:5000');
  *
  * // Connect to specific channel
+ * // Connect with in-memory collection and data filtering
  * sse.connect({
  *   channel: "room_123",       // Filters for tenant_id::room_123
- *   eventName: "NewMessage"    // Optional: Filter specific event type
+ *   eventName: "NewMessage",    // Optional: Filter specific event type
+ *   collection: "posts",
+ *   filter: { status: "published", views: { $gt: 100 } }
  * });
  *
  * --------------------------------------------
@@ -1747,14 +1750,31 @@ export class ApexKitRealtimeSSEClient {
     this.token = token;
   }
 
-  connect({ channel, eventName }: { channel?: string; eventName?: string } = {}) {
+  connect({
+    channel,
+    eventName,
+    filter,
+    collection,
+  }: {
+    channel?: string;
+    eventName?: string;
+    filter?: string | Record<string, any>;
+    collection?: string | number;
+  } = {}) {
     if (this.source) this.source.close();
 
     const params = new URLSearchParams();
     if (channel) params.append('channel', channel);
     if (eventName) params.append('event', eventName);
+    if (collection) params.append('collection', String(collection));
 
-    // [ADDED] Forward the Token securely for stream authentication
+    // Serialize object filters to JSON string
+    if (filter) {
+      const filterStr = typeof filter === 'object' ? JSON.stringify(filter) : filter;
+      params.append('filter', filterStr);
+    }
+
+    // Forward the Token securely for stream authentication
     if (this.token) params.append('token', this.token);
 
     this.source = new EventSource(`${this.baseUrl}/sse?${params.toString()}`, {
